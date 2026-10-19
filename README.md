@@ -1,5 +1,7 @@
 # Carry the Light
 
+https://edwinychoi.github.io/2026-balloon-game/
+
 A small, meditative browser toy. Breathe gently into your phone's microphone to lift a balloon carrying a glowing memory from a dawn meadow, through open sky and twilight, up into the stars.
 
 There are no scores, timers or ways to fail. When the balloon reaches the top, the memory leaves its harness and becomes a new star.
