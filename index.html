@@ -594,9 +594,9 @@ function finishCalib(skip) {
 function enterPlay() {
   hide(P.calib);
   st.mode = 'play'; st.interact = 0; st.howtoHidden = false;
-  $('hint').textContent = micMissing
+  $('hint').textContent = 'One soft breath carries it a long way, so rest between breaths. ' + (micMissing
     ? 'The microphone isn’t available here, so press and hold anywhere to breathe. Two fingers, or Shift, make a strong gust.'
-    : 'No microphone? Hold the screen or the space bar. Two fingers or Shift make a strong gust.';
+    : 'No microphone? Hold the screen or the space bar. Two fingers or Shift make a strong gust.');
   setTimeout(() => show(P.howto), 300);
 }
 $('begin').addEventListener('click', begin);
@@ -694,13 +694,15 @@ function update(dt) {
 
   // Any breath lifts. A very strong one lifts a touch less and adds sway instead of speed.
   const over = Math.max(0, b - 0.85);
-  const eff = b < 0.08 ? 0 : Math.max(0.62, Math.min(b, 0.85)) - Math.min(over, 0.75) * 0.3;
+  // One short breath fills the balloon almost at once, and the warmth lasts: a single breath
+  // carries it upward for ~10–12 s, so the player breathes at a calm, normal pace.
+  const eff = b < 0.08 ? 0 : 0.85 - Math.min(over, 0.75) * 0.15;
   st.instab = clamp((st.instab + over * 0.9 * dt) * Math.exp(-dt * 0.7), 0, 1.2);
-  const rate = eff > st.heat ? 1.6 : 0.16;   // warms fast, cools slowly: pauses and inhales are fine
-  st.heat += (eff * (0.95 + 0.1 * steady) - st.heat) * (1 - Math.exp(-dt * rate));
-  // each new breath gives a small upward nudge so it feels immediate
+  const rate = eff > st.heat ? 3.0 : 0.07;
+  st.heat += (eff * (0.95 + 0.05 * steady) - st.heat) * (1 - Math.exp(-dt * rate));
+  // each new breath gives a clear upward push so it feels immediate
   const breathing = b > 0.3;
-  if (breathing && !st.wasBreathing && st.mode !== 'title') { st.vy = Math.max(st.vy, 0) + 14; st.sqV -= 0.6; }
+  if (breathing && !st.wasBreathing && st.mode !== 'title') { st.vy = Math.max(st.vy, 0) + 32; st.sqV -= 0.8; }
   st.wasBreathing = breathing;
   if (st.released) st.heat = Math.max(st.heat, 0.31);
 
@@ -708,7 +710,7 @@ function update(dt) {
   let a = st.heat * 100 * (1 - 0.4 * Math.min(1, st.instab)) - 33;
   a -= st.vy * (st.vy > 0 ? 0.4 : 1.2);
   if (st.alt > TOP) a -= (st.alt - TOP) * 0.6 + st.vy * 0.8;
-  st.vy = clamp(st.vy + a * dt, -60, 90);
+  st.vy = clamp(st.vy + a * dt, -60, 130);
   st.alt += st.vy * dt;
   if (st.alt < 0) { if (st.vy < -8) st.sqV += -st.vy * 0.012; st.alt = 0; st.vy = Math.max(0, st.vy); }
   const airborne = smooth(0, 60, st.alt);
