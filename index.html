@@ -436,7 +436,7 @@ const Mic = {
   },
   // Breath is a simple gate: anything clearly louder than the room counts as a breath and lifts the
   // balloon. How far above the gate it is only decides how much the balloon sways.
-  floorDb: -55, gate: 7, db: null, on: false, onTime: 0,
+  floorDb: -55, gate: 5, db: null, on: false, onTime: 0,
   level(dt) {
     const m = this.read();
     const d = 20 * Math.log10(Math.max(m.rms, 1e-6));
@@ -594,7 +594,7 @@ function finishCalib(skip) {
 function enterPlay() {
   hide(P.calib);
   st.mode = 'play'; st.interact = 0; st.howtoHidden = false;
-  $('hint').textContent = 'One soft breath carries it a long way, so rest between breaths. ' + (micMissing
+  $('hint').textContent = 'Each soft breath gives it a quick lift. Keep breathing gently to carry it higher. ' + (micMissing
     ? 'The microphone isn’t available here, so press and hold anywhere to breathe. Two fingers, or Shift, make a strong gust.'
     : 'No microphone? Hold the screen or the space bar. Two fingers or Shift make a strong gust.');
   setTimeout(() => show(P.howto), 300);
@@ -671,7 +671,7 @@ function update(dt) {
       // Put the gate well below the breath we just heard, so even soft breaths count.
       const s = c.samples.slice().sort((a, b) => a - b);
       const rise = (s[Math.floor(s.length * 0.75)] ?? Mic.floorDb) - Mic.floorDb;
-      Mic.gate = rise > 10 ? clamp(rise * 0.35, 5, 10) : 6;
+      Mic.gate = rise > 10 ? clamp(rise * 0.3, 4, 9) : 5;
       c.phase = 'done'; c.t = 0;
       $('calibText').textContent = 'That’s the one. Keep it gentle.';
     } else if (c.phase === 'done' && c.t > 1.5) finishCalib(false);
@@ -694,15 +694,15 @@ function update(dt) {
 
   // Any breath lifts. A very strong one lifts a touch less and adds sway instead of speed.
   const over = Math.max(0, b - 0.85);
-  // One short breath fills the balloon almost at once, and the warmth lasts: a single breath
-  // carries it upward for ~10–12 s, so the player breathes at a calm, normal pace.
+  // Even a light breath fills the balloon almost at once and gives it a quick boost, but the
+  // warmth fades within a second or two, so each breath is a short lift rather than a long ride.
   const eff = b < 0.08 ? 0 : 0.85 - Math.min(over, 0.75) * 0.15;
   st.instab = clamp((st.instab + over * 0.9 * dt) * Math.exp(-dt * 0.7), 0, 1.2);
-  const rate = eff > st.heat ? 3.0 : 0.07;
+  const rate = eff > st.heat ? 3.0 : 1.2;
   st.heat += (eff * (0.95 + 0.05 * steady) - st.heat) * (1 - Math.exp(-dt * rate));
-  // each new breath gives a clear upward push so it feels immediate
-  const breathing = b > 0.3;
-  if (breathing && !st.wasBreathing && st.mode !== 'title') { st.vy = Math.max(st.vy, 0) + 32; st.sqV -= 0.8; }
+  // each new breath, however light, gives a strong upward push so it feels immediate
+  const breathing = b > 0.2;
+  if (breathing && !st.wasBreathing && st.mode !== 'title') { st.vy = Math.max(st.vy, 0) + 110; st.sqV -= 1.0; }
   st.wasBreathing = breathing;
   if (st.released) st.heat = Math.max(st.heat, 0.31);
 
