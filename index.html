@@ -126,6 +126,12 @@ function ramp(stops, p) {
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, w | 0); c.height = Math.max(1, h | 0); return c; };
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
                 set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+// #debug shows a small live readout of the breath detector, for tuning on a real phone.
+const dbgEl = location.hash === '#debug' ? (() => {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);font:11px/1.4 ui-monospace,monospace;color:#fff;background:rgba(0,0,0,.45);padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre-wrap';
+  document.body.appendChild(d); return d;
+})() : null;
 const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- the journey ---------- */
@@ -432,10 +438,17 @@ const Mic = {
     const m = this.read();
     if (m.rms < this.floor) this.floor += (m.rms - this.floor) * 0.05; else this.floor *= 1 + 0.012 * dt;
     this.floor = Math.min(this.floor, this.ref * 0.5);
-    const nrm = Math.max(0, m.rms - this.floor * 1.5) / Math.max(1e-5, this.ref - this.floor * 1.5);
+    // Work in decibels: blowing straight into a phone mic is many times louder than the calibrated
+    // breath, and a linear scale would read every real breath as "far too much".
+    const dB = v => 20 * Math.log10(Math.max(v, 1e-6));
+    const span = Math.max(8, dB(this.ref) - dB(this.floor));
+    const nrm = Math.max(0, (dB(m.rms) - dB(this.floor) - 3) / span);   // ~1 at the calibrated breath
+    // Keep adapting to the player: sustained strong breaths raise the reference, soft ones lower it.
+    if (nrm > 1.2) this.ref *= 1 + 0.35 * dt * Math.min(2, nrm - 1.2);
+    else if (nrm > 0.15 && nrm < 0.55) this.ref = Math.max(this.floor * 2.5, this.ref * (1 - 0.04 * dt));
     const like = clamp(0.3 + 0.7 * smooth(0.06, 0.28, m.flat) + 0.25 * smooth(0.3, 0.65, m.low), 0.3, 1);
     st.micLike = like;
-    return Math.min(2.2, nrm * 0.6 * like);
+    return Math.min(1.6, nrm * 0.62 * like);
   },
 };
 
@@ -670,13 +683,14 @@ function update(dt) {
   st.dev += ((b - st.slowB) ** 2 - st.dev) * (1 - Math.exp(-dt * 2));
   const steady = clamp(1 - Math.sqrt(st.dev) * 4, 0, 1);
   const jerk = (b - prevB) / Math.max(dt, 1e-3);
-  if (jerk > 4) { st.instab += Math.min(0.35, (jerk - 4) * 0.04); st.sqV += Math.min(1.2, (jerk - 4) * 0.05); }
+  if (jerk > 6) { st.instab += Math.min(0.25, (jerk - 6) * 0.03); st.sqV += Math.min(1.2, (jerk - 6) * 0.05); }
   st.sqV += (b - prevB) * 2.5;
 
-  // too much breath: lift plateaus and turns into wobble instead of speed
+  // too much breath: lift eases off a little and turns into wobble instead of speed,
+  // but a strong breath still carries the balloon upward
   const over = Math.max(0, b - 0.85);
-  const eff = b < 0.06 ? 0 : Math.max(0, Math.min(b, 0.85) - over * 0.9);
-  st.instab = clamp((st.instab + over * 1.4 * dt) * Math.exp(-dt * 0.7), 0, 1.2);
+  const eff = b < 0.06 ? 0 : Math.min(b, 0.85) - Math.min(over, 0.75) * 0.35;
+  st.instab = clamp((st.instab + over * 0.9 * dt) * Math.exp(-dt * 0.7), 0, 1.2);
   const rate = eff > st.heat ? 1.1 : 0.16;   // slow cooling: pauses and inhales are fine
   st.heat += (eff * (0.8 + 0.3 * steady) - st.heat) * (1 - Math.exp(-dt * rate));
   if (st.released) st.heat = Math.max(st.heat, 0.31);
@@ -754,6 +768,10 @@ function update(dt) {
     if (r.t > r.T + 4 && st.mode === 'ending') { st.mode = 'after'; show(P.end); }
   }
 
+  if (dbgEl && (st.dbgT = (st.dbgT || 0) + dt) > 0.2) {
+    st.dbgT = 0;
+    dbgEl.textContent = `mic ${Mic.ok ? 'on' : 'off'}  breath ${b.toFixed(2)}  lift ${st.heat.toFixed(2)}  sway ${st.instab.toFixed(2)}  floor ${(20 * Math.log10(Math.max(Mic.floor, 1e-6))).toFixed(0)}dB  ref ${(20 * Math.log10(Math.max(Mic.ref, 1e-6))).toFixed(0)}dB  alt ${(st.alt / TOP * 100).toFixed(0)}%`;
+  }
   document.documentElement.style.setProperty('--text', p > 0.52 ? 'var(--cream)' : 'var(--ink)');
   document.documentElement.style.setProperty('--halo', p > 0.52 ? 'rgba(8,12,38,.55)' : 'rgba(255,242,228,.55)');
   Snd.update(dt, p, b, st.instab);
